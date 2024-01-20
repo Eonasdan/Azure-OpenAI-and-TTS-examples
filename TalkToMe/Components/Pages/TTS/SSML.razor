@@ -1,0 +1,119 @@
+﻿@page "/SSML"
+@using Azure.AI.OpenAI
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@inject IOpenAIService OpenAIService
+@inject ISpeechSynthesisService SpeechSynthesisService
+@rendermode InteractiveServer
+<PageTitle>Home</PageTitle>
+
+<SectionContent SectionName="top-bar">
+    <button class="btn btn-warning" @onclick="StopAudio">Stop Audio</button>
+</SectionContent>
+
+<Chat OnMessageSent="MessageReceivedAsync" @ref="_chat"></Chat>
+
+@code {
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+
+    private Chat _chat = default!;
+    private const string SystemMessage = "Pretend that you are an immersive none player character in a video game talking to a player. You must return JSON  that has a property called \"text\" with a plain text response and a property called \"ssml\". The ssml property will be populated with SSML version of the text so that you can provide emotional context. Make use of `mstts:express-as` to provide style. Do not include a `speak` tag.";
+    //Use `en-US-JennyNeural` as a voice. You must include a `voice` tag.
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        //if (!firstRender) return;
+        if (_chat.Messages.Any()) return;
+        _chat.Messages.Add(new Chat.MessageBody
+        {
+            IsMe = true,
+            Message = "can you create an ssml example?"
+        });
+    }
+
+    private async Task MessageReceivedAsync(string message)
+    {
+        try
+        {
+            /*var chatRequestMessages = _chat.Messages.Take(10).Select<Chat.MessageBody, ChatRequestMessage>(x =>
+            {
+                if (x.IsMe) return new ChatRequestUserMessage(x.Message);
+                return new ChatRequestAssistantMessage(x.Message);
+            }).ToList();*/
+
+            _chat.Messages.Add(new Chat.MessageBody
+            {
+                //loading
+                Message = ""
+            });
+
+            /*var result = await OpenAIService.ChatCompletionAsync(chatRequestMessages, systemMessage: SystemMessage);
+
+            if (string.IsNullOrEmpty(result)) return;
+
+            var parsed = JsonSerializer.Deserialize<SSMLReturn>(result);
+
+            _chat.Messages.Last().Message = parsed.Text;
+            parsed.SSML = parsed.SSML
+                .Replace("<speak>", "")
+                .Replace("</speak>", "");
+                */
+
+            _chat.Messages.Last().Message = "Hello, this is a sample SSML document. I can emphasize words and change pauses. Let me switch to a different voice. Now, I'm back to my default voice. Do you like it?";
+
+            var audioData = await SpeechSynthesisService.TextToSpeechSSML(_ssml);
+            if (audioData != null)
+            {
+                var base64 = Convert.ToBase64String(audioData);
+                await Js.InvokeVoidAsync("updateAudio", base64);
+            }
+        }
+        catch (Exception ex)
+        {
+            await Js.LogAsync(ex.Message);
+            await Js.LogAsync(ex.StackTrace);
+        }
+    }
+
+    public async Task StopAudio()
+    {
+        await Js.LogAsync("stop clicked");
+        await Js.InvokeVoidAsync("stopAudio");
+    }
+
+    private string _ssml = @"<speak xmlns=""http://www.w3.org/2001/10/synthesis"" 
+       xmlns:mstts=""http://www.w3.org/2001/mstts""
+       xmlns:emo=""http://www.w3.org/2009/10/emotionml"" version=""1.0"" xml:lang=""en-GB"">
+    <voice name=""en-GB-ElliotNeural"">This is indeed a mystery.
+        <break/>
+        What do you imagine that it means?
+    </voice>
+    <voice name=""en-GB-ThomasNeural"">I have no data yet. It is a capital mistake to theorise before one has data.
+        Insensibly one begins to twist facts to suit theories, instead of theories to suit facts. But the note itself.
+        What do you deduce from it?
+    </voice>
+    <voice name=""en-GB-ElliotNeural"">
+        <mstts:express-as style=""narration-relaxed"">
+            I carefully examined the writing, and the paper upon which it was written.
+        </mstts:express-as>
+        <break/>
+        The man who wrote it was presumably well to do.
+        <break/>
+        <mstts:express-as style=""narration-relaxed"">
+            I remarked, endeavouring to imitate my companion’s processes.
+        </mstts:express-as>
+        <break/>
+        Such paper could not be bought under half a crown a packet. It is peculiarly strong and stiff.
+    </voice>
+    <voice name=""en-GB-ThomasNeural"">
+        Peculiar—that is the very word. It is not an English paper at all. Hold it up to the light.
+    </voice>
+</speak>";
+
+    public class SSMLReturn
+    {
+        [JsonPropertyName("text")] public string? Text { get; set; }
+        [JsonPropertyName("ssml")] public string? SSML { get; set; }
+    }
+
+}

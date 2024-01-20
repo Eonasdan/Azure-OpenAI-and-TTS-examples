@@ -1,0 +1,105 @@
+﻿@page "/Chat"
+
+<div class="card chat-app">
+    <div class="chat">
+        <div class="chat-history" style="height: @(HistoryHeight)vh">
+            <ul class="m-b-0">
+                @foreach (var message in Messages)
+                {
+                    <li class="clearfix">
+                        <div class="message-data @(message.IsMe ? "text-end" : "")">
+                            @(message.IsMe ? "You" : OtherName) <span class="message-data-time">@message.Timestamp</span>
+                        </div>
+                        <div class="message @(message.IsMe ? "other-message bg-primary float-right" : "my-message bg-secondary") text-light">
+                            @if (string.IsNullOrEmpty(message.Message))
+                            {
+                                <span>
+                                    <i class="fa-solid fa-spinner fa-spin"></i>
+                                </span>
+                            }
+                            else
+                            {
+                                @message.Message
+                            }
+                        </div>
+                    </li>
+                }
+            </ul>
+        </div>
+        <div class="chat-message clearfix">
+            @if (TextPrompt)
+            {
+                <div class="input-group mb-0">
+                    <input type="text" @bind="_messageInput" class="form-control" @onkeyup="OnKeyUp" placeholder="Enter text here...">
+                    <span class="input-group-text">
+                        <span @onclick="Send">
+                            <i class="fa-solid fa-paper-plane"></i>
+                        </span>
+                    </span>
+                </div>
+            }
+            else
+            {
+                <button @onclick="Speak" class="btn btn-primary"><i class="fa-solid fa-microphone"></i> Speak</button>
+            }
+        </div>
+    </div>
+</div>
+<audio id="audioPlayer"></audio>
+
+@code {
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+
+    public List<MessageBody> Messages { get; private set; } = [];
+
+    private string? _messageInput = "";
+
+    [Parameter] public EventCallback<string> OnMessageSent { get; set; }
+    [Parameter] public EventCallback OnSpeak { get; set; }
+
+    [Parameter] public int HistoryHeight { get; set; } = 85;
+    [Parameter] public string OtherName { get; set; } = "NPC";
+    [Parameter] public bool TextPrompt { get; set; } = true;
+
+    private async Task Speak()
+    {
+        await OnSpeak.InvokeAsync();
+    }
+
+    private async Task Send()
+    {
+        try
+        {
+            Messages.Add(new MessageBody
+            {
+                IsMe = true,
+                Message = _messageInput,
+                Timestamp = DateTime.Now.ToShortTimeString()
+            });
+            var temp = _messageInput;
+
+            _messageInput = "";
+            await OnMessageSent.InvokeAsync(temp);
+        }
+        catch (Exception ex)
+        {
+            await Js.LogAsync(ex.Message);
+            await Js.LogAsync(ex.StackTrace);
+        }
+    }
+
+    private Task OnKeyUp(KeyboardEventArgs e)
+    {
+        return e.Code != "Enter" ? Task.CompletedTask : Send();
+    }
+
+    public class MessageBody
+    {
+        public string? Message { get; set; }
+
+        public string? Timestamp { get; set; }
+
+        public bool IsMe { get; set; }
+    }
+
+}

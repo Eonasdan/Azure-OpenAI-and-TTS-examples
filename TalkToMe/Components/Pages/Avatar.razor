@@ -1,0 +1,115 @@
+﻿@page "/Avatar"
+@implements IDisposable
+@using Azure.AI.OpenAI
+@implements IAsyncDisposable
+@inject ISpeechAvatarService AvatarServiceService
+@inject IOpenAIService OpenAIService
+@rendermode InteractiveServer
+<PageTitle>Avatar</PageTitle>
+<div id="avatar-history">
+    <Chat OnMessageSent="MessageReceivedAsync" @ref="_chat" HistoryHeight="20"></Chat>
+</div>
+<video id="videoPlayer" controls>
+    Your browser does not support the video tag.
+</video>
+
+@code {
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+
+    private Chat _chat = default!;
+    private Timer? _timer;
+    private string? _jobId;
+    private string? _assistantResponse;
+    private int _timerWait = 3000;
+    private int _checkAttempts;
+
+    private async void MessageReceivedAsync(string inputText)
+    {
+        _checkAttempts = 0;
+        var chatRequestMessages = _chat.Messages.Take(10).Select<Chat.MessageBody, ChatRequestMessage>
+        (x =>
+        {
+            if (x.IsMe) return new ChatRequestUserMessage(x.Message);
+            return new ChatRequestAssistantMessage(x.Message);
+        }).ToList();
+
+        _chat.Messages.Add(new Chat.MessageBody
+        {
+            //loading
+            Message = ""
+        });
+
+        _assistantResponse = await OpenAIService.ChatCompletionAsync(chatRequestMessages);
+
+        Console.WriteLine(_assistantResponse);
+
+        if (string.IsNullOrEmpty(_assistantResponse)) return;
+
+        _jobId = await AvatarServiceService.SubmitSynthesis(_assistantResponse);
+        _timer = new Timer(_ => CheckJobStatus().Wait(), null, 0, _timerWait);
+    }
+
+    private async Task CheckJobStatus()
+    {
+        try
+        {
+            Console.WriteLine("Checking status");
+            var job = await AvatarServiceService.GetJobStatus(_jobId!);
+
+            switch (job.status)
+            {
+                case "Succeeded":
+                    Console.WriteLine("Job succeeded");
+                    _chat.Messages.Last().Message = _assistantResponse;
+                    await Js.InvokeVoidAsync("setVideoSource", job.url);
+                    await _timer!.DisposeAsync();
+                    break;
+                case "Failed":
+                    Console.WriteLine("Job failed");
+                    await _timer!.DisposeAsync();
+                    break;
+                default:
+                    Console.WriteLine("Job is still running");
+                    break;
+            }
+
+            _checkAttempts++;
+
+            //This is help spread out the polling attempts.
+            //The more attempts, the longer we wait before checking again.
+            if (_checkAttempts > 2)
+            {
+                switch (_checkAttempts)
+                {
+                    case 2:
+                        _timerWait = 5 * 1000;
+                        break;
+                    case > 5:
+                        _timerWait = 10 * 1000;
+                        break;
+                }
+
+                await _timer!.DisposeAsync();
+                _timer = new Timer(_ => CheckJobStatus().Wait(), null, 0, _timerWait);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred while checking the job status: {ex.Message}");
+            await _timer!.DisposeAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_timer != null) await _timer.DisposeAsync();
+        _timer = null;
+    }
+
+}

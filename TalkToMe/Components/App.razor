@@ -1,0 +1,48 @@
+﻿<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <base href="/"/>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <link rel="stylesheet" href="app.css"/>
+    <link rel="stylesheet" href="TalkToMe.styles.css"/>
+    <link rel="icon" type="image/png" href="favicon.png"/>
+    <HeadOutlet/>
+</head>
+
+<body>
+<Routes/>
+<script src="_framework/blazor.web.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/js/solid.min.js" integrity="sha512-+fI924YJzeYFv7M0R29zJvRThPinSUOAmo5rpR9v6G4eWIbva/prHdZGSPN440vuf781/sOd/Fr+5ey0pqdW9w==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/js/fontawesome.min.js" integrity="sha512-C8qHv0HOaf4yoA7ISuuCTrsPX8qjolYTZyoFRKNA9dFKnxgzIHnYTOJhXQIt6zwpIFzCrRzUBuVgtC4e5K1nhA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+    window.updateAudio = (base64Audio) => {
+        const audioPlayer = document.getElementById('audioPlayer');
+        window.stopAudio();
+        audioPlayer.src = `data:audio/mp3;base64,${base64Audio}`;
+        audioPlayer.play();
+    }
+    window.stopAudio = () => {
+        const audioPlayer = document.getElementById('audioPlayer');
+        audioPlayer.pause();
+        audioPlayer.currentTime = 0; 
+    }
+    
+    window.setVideoSource = (url) => {
+        const video = document.getElementById('videoPlayer');
+        window.stopVideoSource();
+        video.src = url;
+        video.play();
+    }    
+    window.stopVideoSource = (url) => {
+        const video = document.getElementById('videoPlayer');
+        video.src = url;
+        video.pause();
+        video.currentTime = 0; 
+    }
+</script>
+</body>
+</html>

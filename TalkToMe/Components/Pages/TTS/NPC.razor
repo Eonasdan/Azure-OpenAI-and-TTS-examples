@@ -1,0 +1,62 @@
+﻿@page "/NPC"
+@using Azure.AI.OpenAI
+@inject IOpenAIService OpenAIService
+@inject ISpeechSynthesisService SpeechSynthesisService
+@rendermode InteractiveServer
+<PageTitle>Home</PageTitle>
+
+<SectionContent SectionName="top-bar">
+    <button class="btn btn-warning" @onclick="StopAudio">Stop Audio</button>
+</SectionContent>
+
+<Chat OnMessageSent="MessageReceivedAsync" @ref="_chat" ></Chat>
+
+@code {
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+
+    private Chat _chat = default!;
+    private const string SystemMessage = "Pretend that you are an immersive none player character in a video game talking to a player.";
+    
+    private async Task MessageReceivedAsync(string message)
+    {
+        try
+        {
+            var chatRequestMessages = _chat.Messages.Take(10).Select<Chat.MessageBody, ChatRequestMessage>(x =>
+            {
+                if (x.IsMe) return new ChatRequestUserMessage(x.Message);
+                return new ChatRequestAssistantMessage(x.Message);
+            }).ToList();
+            
+            _chat.Messages.Add(new Chat.MessageBody
+            {
+                //loading
+                Message = ""
+            });
+            
+            var result = await OpenAIService.ChatCompletionAsync(chatRequestMessages, SystemMessage);
+
+            if (string.IsNullOrEmpty(result)) return;
+
+            _chat.Messages.Last().Message = result;
+
+            var audioData = await SpeechSynthesisService.TextToSpeech(result);
+            if (audioData != null)
+            {
+                var base64 = Convert.ToBase64String(audioData);
+                await Js.InvokeVoidAsync("updateAudio", base64);
+            }
+        }
+        catch (Exception ex)
+        {
+            await Js.LogAsync(ex.Message);
+            await Js.LogAsync(ex.StackTrace);
+        }
+    }
+    
+    public async Task StopAudio()
+    {
+        await Js.LogAsync("stop clicked");
+        await Js.InvokeVoidAsync("stopAudio");
+    }
+    
+}

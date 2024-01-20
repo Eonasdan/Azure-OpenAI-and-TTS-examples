@@ -1,0 +1,89 @@
+﻿@page "/Narrative-Voice"
+@using Azure.AI.OpenAI
+@using Microsoft.CognitiveServices.Speech
+@using Microsoft.CognitiveServices.Speech.Audio
+@inject IOpenAIService OpenAIService
+@inject ISpeechSynthesisService SpeechSynthesisService
+@rendermode InteractiveServer
+<PageTitle>Narrative</PageTitle>
+
+<SectionContent SectionName="top-bar">
+    <button class="btn btn-warning" @onclick="StopAudio">Stop Audio</button>
+</SectionContent>
+
+<Chat @ref="_chat" OtherName="Narrator" OnSpeak="SpeakAsync" TextPrompt="false"></Chat>
+
+@code {
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+
+    private Chat _chat = default!;
+    private const string SystemMessage = "You create a narrative text adventure for a player. You will describe the environment the player is in and give them options to explore items in the scene or directions to travel to continue the narrative. You will prompt the player to make a choice before continuing. You keep track of the player's health and gold and present these stats at the end of each message. The narrative should change these values when apporiate. When the player's health is 0, the story ends.";
+    private const string SpeechError = "Something went wrong";
+
+    private async Task SpeakAsync()
+    {
+        try
+        {
+            _chat.Messages.Add(new Chat.MessageBody
+            {
+                IsMe = true,
+                Message = "Listening"
+            });
+
+            using var audioConfig = AudioConfig.FromDefaultMicrophoneInput();
+            var speech = await SpeechSynthesisService.SpeechRecognizeAsync(audioConfig);
+            if (speech.ResultReason != ResultReason.RecognizedSpeech)
+            {
+                _chat.Messages.Last().Message = SpeechError;
+                return;
+            }
+
+            _chat.Messages.Last().Message = speech.Data;
+
+             await ChatCompletion();
+        }
+        catch (Exception ex)
+        {
+            await Js.LogAsync(ex.Message);
+            await Js.LogAsync(ex.StackTrace);
+        }
+    }
+
+    private async Task ChatCompletion()
+    {
+        var chatRequestMessages = _chat.Messages
+            .Where(x => x.Message != SpeechError)
+            .Take(10)
+            .Select<Chat.MessageBody, ChatRequestMessage>(x =>
+            {
+                if (x.IsMe) return new ChatRequestUserMessage(x.Message);
+                return new ChatRequestAssistantMessage(x.Message);
+            }).ToList();
+
+        _chat.Messages.Add(new Chat.MessageBody
+        {
+            //loading
+            Message = ""
+        });
+
+        var result = await OpenAIService.ChatCompletionAsync(chatRequestMessages, SystemMessage);
+
+        if (string.IsNullOrEmpty(result)) return;
+
+        _chat.Messages.Last().Message = result;
+
+        var audioData = await SpeechSynthesisService.TextToSpeech(result);
+        if (audioData != null)
+        {
+            var base64 = Convert.ToBase64String(audioData);
+            await Js.InvokeVoidAsync("updateAudio", base64);
+        }
+    }
+
+    public async Task StopAudio()
+    {
+        await Js.LogAsync("stop clicked");
+        await Js.InvokeVoidAsync("stopAudio");
+    }
+
+}
